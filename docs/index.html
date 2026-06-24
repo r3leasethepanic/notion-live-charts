@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Notion Live Charts</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
+  <script src="./config.js"></script>
+</head>
+<body>
+  <main class="page">
+    <header class="header">
+      <div>
+        <p class="eyebrow">Notion → live charts</p>
+        <h1>Финансовый дашборд</h1>
+        <p class="subtitle">Графики обновляются из Notion через Cloudflare Worker.</p>
+      </div>
+      <button id="refreshButton" class="button" type="button">Обновить</button>
+    </header>
+
+    <section id="status" class="status visible">Загружаю данные…</section>
+
+    <section class="kpi-grid">
+      <article class="kpi-card"><span>Расходы</span><strong id="totalExpenses">—</strong></article>
+      <article class="kpi-card"><span>Доходы</span><strong id="totalIncome">—</strong></article>
+      <article class="kpi-card"><span>Баланс</span><strong id="netBalance">—</strong></article>
+      <article class="kpi-card"><span>Записей расходов</span><strong id="expenseCount">—</strong></article>
+    </section>
+
+    <section class="grid">
+      <article class="chart-card wide"><h2>Доходы, расходы и баланс по месяцам</h2><canvas id="monthlyChart"></canvas></article>
+      <article class="chart-card"><h2>Расходы по категориям</h2><canvas id="categoryChart"></canvas></article>
+      <article class="chart-card"><h2>Доходы по источникам</h2><canvas id="incomeSourceChart"></canvas></article>
+      <article class="chart-card"><h2>Кто потратил</h2><canvas id="payerChart"></canvas></article>
+      <article class="chart-card"><h2>Тип расходов</h2><canvas id="expenseTypeChart"></canvas></article>
+      <article class="chart-card wide"><h2>Обязательные vs необязательные</h2><canvas id="requiredChart"></canvas></article>
+    </section>
+  </main>
+  <script src="./app.js"></script>
+</body>
+</html>
