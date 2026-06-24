@@ -31,18 +31,9 @@ function json(data, status = 200, env = {}) {
   });
 }
 
-function envOrDefault(env, key, fallback) {
-  return env[key] || fallback;
-}
-
-function required(env, key) {
-  if (!env[key]) throw new Error(`Missing required environment variable: ${key}`);
-  return env[key];
-}
-
-function richText(items) {
-  return (items || []).map(part => part.plain_text || '').join('').trim();
-}
+function envOrDefault(env, key, fallback) { return env[key] || fallback; }
+function required(env, key) { if (!env[key]) throw new Error(`Missing required environment variable: ${key}`); return env[key]; }
+function richText(items) { return (items || []).map(part => part.plain_text || '').join('').trim(); }
 
 function propText(prop) {
   if (!prop) return 'Без значения';
@@ -98,9 +89,9 @@ function monthKey(dateLike) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
-function add(map, key, amount) {
-  map[key || 'Без значения'] = Number((map[key || 'Без значения'] || 0) + (amount || 0));
-}
+function add(map, key, amount) { map[key || 'Без значения'] = Number((map[key || 'Без значения'] || 0) + (amount || 0)); }
+function isPaid(status) { return String(status || '').toLowerCase().trim() === 'оплачено'; }
+function isPlanned(status) { return String(status || '').toLowerCase().trim() === 'запланировано'; }
 
 async function queryDataSource(env, id) {
   const token = required(env, 'NOTION_TOKEN');
@@ -109,11 +100,7 @@ async function queryDataSource(env, id) {
   do {
     const res = await fetch(`https://api.notion.com/v1/data_sources/${id}/query`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Notion-Version': NOTION_VERSION,
-        'Content-Type': 'application/json',
-      },
+      headers: { Authorization: `Bearer ${token}`, 'Notion-Version': NOTION_VERSION, 'Content-Type': 'application/json' },
       body: JSON.stringify({ page_size: 100, ...(cursor ? { start_cursor: cursor } : {}) }),
     });
     if (!res.ok) throw new Error(`Notion API error ${res.status}: ${await res.text()}`);
@@ -124,6 +111,21 @@ async function queryDataSource(env, id) {
   return results;
 }
 
+function emptyExpenseSummary() {
+  return { total: 0, count: 0, byMonth: {}, byCategory: {}, byPayer: {}, byType: {}, byStatus: {}, byRequired: {} };
+}
+
+function addExpenseBucket(out, amount, month, category, payer, type, status, required) {
+  out.total += amount;
+  out.count += 1;
+  add(out.byMonth, month, amount);
+  add(out.byCategory, category, amount);
+  add(out.byPayer, payer, amount);
+  add(out.byType, type, amount);
+  add(out.byStatus, status, amount);
+  add(out.byRequired, required, amount);
+}
+
 function summarizeExpenses(rows, env) {
   const amountProp = envOrDefault(env, 'EXPENSE_AMOUNT_PROPERTY', DEFAULTS.expenseAmountProperty);
   const dateProp = envOrDefault(env, 'EXPENSE_DATE_PROPERTY', DEFAULTS.expenseDateProperty);
@@ -132,19 +134,22 @@ function summarizeExpenses(rows, env) {
   const typeProp = envOrDefault(env, 'EXPENSE_TYPE_PROPERTY', DEFAULTS.expenseTypeProperty);
   const statusProp = envOrDefault(env, 'EXPENSE_STATUS_PROPERTY', DEFAULTS.expenseStatusProperty);
   const requiredProp = envOrDefault(env, 'EXPENSE_REQUIRED_PROPERTY', DEFAULTS.expenseRequiredProperty);
-  const out = { total: 0, count: 0, byMonth: {}, byCategory: {}, byPayer: {}, byType: {}, byStatus: {}, byRequired: {} };
+  const out = { all: emptyExpenseSummary(), paid: emptyExpenseSummary(), planned: emptyExpenseSummary() };
+
   for (const row of rows) {
     const p = row.properties || {};
     const amount = propNumber(p[amountProp]);
     if (!amount) continue;
-    out.total += amount;
-    out.count += 1;
-    add(out.byMonth, monthKey(propDate(p[dateProp])), amount);
-    add(out.byCategory, propText(p[categoryProp]), amount);
-    add(out.byPayer, propText(p[payerProp]), amount);
-    add(out.byType, propText(p[typeProp]), amount);
-    add(out.byStatus, propText(p[statusProp]), amount);
-    add(out.byRequired, propText(p[requiredProp]), amount);
+    const month = monthKey(propDate(p[dateProp]));
+    const category = propText(p[categoryProp]);
+    const payer = propText(p[payerProp]);
+    const type = propText(p[typeProp]);
+    const status = propText(p[statusProp]);
+    const required = propText(p[requiredProp]);
+
+    addExpenseBucket(out.all, amount, month, category, payer, type, status, required);
+    if (isPaid(status)) addExpenseBucket(out.paid, amount, month, category, payer, type, status, required);
+    else if (isPlanned(status)) addExpenseBucket(out.planned, amount, month, category, payer, type, status, required);
   }
   return out;
 }
@@ -166,11 +171,12 @@ function summarizeIncome(rows, env) {
   return out;
 }
 
-function monthly(expensesByMonth, incomeByMonth) {
-  return Array.from(new Set([...Object.keys(expensesByMonth || {}), ...Object.keys(incomeByMonth || {})])).sort().map(month => {
-    const expenses = Number(expensesByMonth[month] || 0);
+function monthly(paidByMonth, plannedByMonth, incomeByMonth) {
+  return Array.from(new Set([...Object.keys(paidByMonth || {}), ...Object.keys(plannedByMonth || {}), ...Object.keys(incomeByMonth || {})])).sort().map(month => {
+    const expenses = Number(paidByMonth[month] || 0);
+    const plannedExpenses = Number(plannedByMonth[month] || 0);
     const income = Number(incomeByMonth[month] || 0);
-    return { month, expenses, income, net: income - expenses };
+    return { month, expenses, paidExpenses: expenses, plannedExpenses, allExpenses: expenses + plannedExpenses, income, net: income - expenses, forecastNet: income - expenses - plannedExpenses };
   });
 }
 
@@ -182,14 +188,26 @@ async function summary(env) {
   const income = summarizeIncome(incomeRows, env);
   return {
     generatedAt: new Date().toISOString(),
-    counts: { expenses: expenses.count, income: income.count },
-    totals: { expenses: Math.round(expenses.total), income: Math.round(income.total), net: Math.round(income.total - expenses.total) },
-    monthly: monthly(expenses.byMonth, income.byMonth),
-    expensesByCategory: expenses.byCategory,
-    expensesByPayer: expenses.byPayer,
-    expensesByType: expenses.byType,
-    expensesByStatus: expenses.byStatus,
-    expensesByRequired: expenses.byRequired,
+    counts: { expenses: expenses.paid.count, plannedExpenses: expenses.planned.count, allExpenses: expenses.all.count, income: income.count },
+    totals: {
+      expenses: Math.round(expenses.paid.total),
+      paidExpenses: Math.round(expenses.paid.total),
+      plannedExpenses: Math.round(expenses.planned.total),
+      allExpenses: Math.round(expenses.all.total),
+      income: Math.round(income.total),
+      net: Math.round(income.total - expenses.paid.total),
+      forecastNet: Math.round(income.total - expenses.paid.total - expenses.planned.total),
+    },
+    monthly: monthly(expenses.paid.byMonth, expenses.planned.byMonth, income.byMonth),
+    expensesByCategory: expenses.paid.byCategory,
+    expensesByCategoryPlanned: expenses.planned.byCategory,
+    expensesByPayer: expenses.paid.byPayer,
+    expensesByPayerPlanned: expenses.planned.byPayer,
+    expensesByType: expenses.paid.byType,
+    expensesByTypePlanned: expenses.planned.byType,
+    expensesByStatus: expenses.all.byStatus,
+    expensesByRequired: expenses.paid.byRequired,
+    expensesByRequiredPlanned: expenses.planned.byRequired,
     incomeBySource: income.bySource,
   };
 }
