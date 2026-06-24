@@ -2,7 +2,7 @@ const app = document.getElementById('app');
 const rubFmt = new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 });
 const numFmt = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
 const colors = ['#60a5fa', '#4ade80', '#a78bfa', '#22d3ee', '#fbbf24', '#fb7185', '#f472b6'];
-const view = new URLSearchParams(location.search).get('view') || 'overview';
+const view = window.MODERN_VIEW || new URLSearchParams(location.search).get('view') || 'overview';
 let chart;
 
 function rub(v) { return rubFmt.format(Math.round(Number(v || 0))); }
