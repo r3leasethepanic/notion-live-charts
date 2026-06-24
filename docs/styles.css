@@ -11,10 +11,15 @@
 
 html, body {
   margin: 0;
+  width: 100%;
   min-height: 100%;
   background: var(--bg);
   color: var(--text);
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body.single-view {
+  overflow: hidden;
 }
 
 .page {
@@ -126,6 +131,41 @@ h1 {
 canvas {
   width: 100% !important;
   height: 210px !important;
+}
+
+body.single-view .page {
+  height: 100vh;
+  padding: 6px;
+  overflow: hidden;
+}
+
+body.single-view .header,
+body.single-view .kpi-grid,
+body.single-view .chart-card {
+  display: none;
+}
+
+body.single-view .grid {
+  display: block;
+  height: 100%;
+}
+
+body.single-view .chart-card.active-chart {
+  display: block;
+  height: calc(100vh - 12px);
+  min-height: 0;
+  padding: 10px;
+  overflow: hidden;
+}
+
+body.single-view .chart-card.active-chart h2 {
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+body.single-view canvas {
+  height: calc(100vh - 50px) !important;
+  min-height: 160px;
 }
 
 @media (max-width: 760px) {
