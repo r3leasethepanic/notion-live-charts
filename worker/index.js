@@ -3,6 +3,7 @@ const NOTION_VERSION = '2025-09-03';
 const DEFAULTS = {
   expensesDataSourceId: 'c6466c54-4c7d-4753-8284-8d55207b8f46',
   incomeDataSourceId: '54e91f62-f449-469e-894a-f6d0a1f6b6f1',
+  expenseTitleProperty: 'Наименование',
   expenseAmountProperty: 'Сумма',
   expenseDateProperty: 'Дата',
   expenseCategoryProperty: 'Категория',
