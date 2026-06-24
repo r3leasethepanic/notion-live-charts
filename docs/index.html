@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Notion Live Charts</title>
+  <title>Финансовые графики</title>
   <link rel="stylesheet" href="./styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
   <script src="./config.js"></script>
@@ -12,9 +12,9 @@
   <main class="page">
     <header class="header">
       <div>
-        <p class="eyebrow">Notion → live charts</p>
-        <h1>Финансовый дашборд</h1>
-        <p class="subtitle">Графики обновляются из Notion через Cloudflare Worker.</p>
+        <p class="eyebrow">Notion finance</p>
+        <h1>Финансы</h1>
+        <p class="subtitle" id="lastUpdated">Автообновление из Notion</p>
       </div>
       <button id="refreshButton" class="button" type="button">Обновить</button>
     </header>
@@ -22,19 +22,37 @@
     <section id="status" class="status visible">Загружаю данные…</section>
 
     <section class="kpi-grid">
-      <article class="kpi-card"><span>Расходы</span><strong id="totalExpenses">—</strong></article>
       <article class="kpi-card"><span>Доходы</span><strong id="totalIncome">—</strong></article>
+      <article class="kpi-card"><span>Расходы</span><strong id="totalExpenses">—</strong></article>
       <article class="kpi-card"><span>Баланс</span><strong id="netBalance">—</strong></article>
-      <article class="kpi-card"><span>Записей расходов</span><strong id="expenseCount">—</strong></article>
+      <article class="kpi-card"><span>Трат</span><strong id="expenseCount">—</strong></article>
     </section>
 
     <section class="grid">
-      <article class="chart-card wide"><h2>Доходы, расходы и баланс по месяцам</h2><canvas id="monthlyChart"></canvas></article>
-      <article class="chart-card"><h2>Расходы по категориям</h2><canvas id="categoryChart"></canvas></article>
-      <article class="chart-card"><h2>Доходы по источникам</h2><canvas id="incomeSourceChart"></canvas></article>
-      <article class="chart-card"><h2>Кто потратил</h2><canvas id="payerChart"></canvas></article>
-      <article class="chart-card"><h2>Тип расходов</h2><canvas id="expenseTypeChart"></canvas></article>
-      <article class="chart-card wide"><h2>Обязательные vs необязательные</h2><canvas id="requiredChart"></canvas></article>
+      <article class="chart-card wide" data-view="monthly">
+        <div class="card-head"><h2>Денежный поток</h2><p id="monthlyInsight">Доходы, расходы и баланс</p></div>
+        <canvas id="monthlyChart"></canvas>
+      </article>
+      <article class="chart-card" data-view="category">
+        <div class="card-head"><h2>Куда уходят деньги</h2><p id="categoryInsight">Топ категорий расходов</p></div>
+        <canvas id="categoryChart"></canvas>
+      </article>
+      <article class="chart-card" data-view="income">
+        <div class="card-head"><h2>Источники дохода</h2><p id="incomeInsight">Структура поступлений</p></div>
+        <canvas id="incomeSourceChart"></canvas>
+      </article>
+      <article class="chart-card" data-view="payer">
+        <div class="card-head"><h2>Кто тратит</h2><p id="payerInsight">Распределение расходов</p></div>
+        <canvas id="payerChart"></canvas>
+      </article>
+      <article class="chart-card" data-view="type">
+        <div class="card-head"><h2>Тип расходов</h2><p id="typeInsight">Личные, семейные, рабочие</p></div>
+        <canvas id="expenseTypeChart"></canvas>
+      </article>
+      <article class="chart-card wide" data-view="required">
+        <div class="card-head"><h2>Обязательные расходы</h2><p id="requiredInsight">Постоянная нагрузка на бюджет</p></div>
+        <canvas id="requiredChart"></canvas>
+      </article>
     </section>
   </main>
   <script src="./app.js"></script>
