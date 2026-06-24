@@ -1,6 +1,6 @@
 Chart.defaults.font.family = 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-Chart.defaults.color = '#94a3b8';
-Chart.defaults.borderColor = 'rgba(148,163,184,0.12)';
+Chart.defaults.color = '#64748b';
+Chart.defaults.borderColor = 'rgba(15,23,42,0.08)';
 
 function moneyTick(value) {
   value = Number(value || 0);
@@ -15,21 +15,21 @@ const baseOptions = {
   animation: false,
   plugins: {
     legend: {
-      labels: { color: '#94a3b8', boxWidth: 9, boxHeight: 9, usePointStyle: true, font: { size: 11, weight: 600 } }
+      labels: { color: '#64748b', boxWidth: 9, boxHeight: 9, usePointStyle: true, font: { size: 11, weight: 600 } }
     },
     tooltip: {
-      backgroundColor: 'rgba(7,17,31,0.96)',
-      titleColor: '#f8fafc',
-      bodyColor: '#f8fafc',
-      borderColor: 'rgba(148,163,184,0.24)',
+      backgroundColor: '#0f172a',
+      titleColor: '#ffffff',
+      bodyColor: '#ffffff',
+      borderColor: 'rgba(15,23,42,0.14)',
       borderWidth: 1,
       cornerRadius: 12,
       padding: 11
     }
   },
   scales: {
-    x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 11, weight: 600 } }, border: { display: false } },
-    y: { grid: { color: 'rgba(148,163,184,0.12)' }, ticks: { color: '#94a3b8', font: { size: 11, weight: 600 }, callback: moneyTick }, border: { display: false } }
+    x: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 11, weight: 600 } }, border: { display: false } },
+    y: { grid: { color: 'rgba(15,23,42,0.08)' }, ticks: { color: '#64748b', font: { size: 11, weight: 600 }, callback: moneyTick }, border: { display: false } }
   }
 };
 
@@ -40,9 +40,10 @@ function drawMonthly(data) {
     data: {
       labels: m.map(r => r.month),
       datasets: [
-        { type: 'bar', label: 'Доходы', data: m.map(r => r.income), backgroundColor: 'rgba(74,222,128,0.32)', borderColor: '#4ade80', borderWidth: 1, borderRadius: 9, barPercentage: 0.65, categoryPercentage: 0.62 },
-        { type: 'bar', label: 'Расходы', data: m.map(r => r.expenses), backgroundColor: 'rgba(251,113,133,0.28)', borderColor: '#fb7185', borderWidth: 1, borderRadius: 9, barPercentage: 0.65, categoryPercentage: 0.62 },
-        { type: 'line', label: 'Баланс', data: m.map(r => r.net), borderColor: '#60a5fa', backgroundColor: '#60a5fa', pointBackgroundColor: '#60a5fa', pointBorderColor: 'rgba(255,255,255,0.9)', pointBorderWidth: 1.5, pointRadius: 3.5, borderWidth: 2.5, tension: 0.35 }
+        { type: 'bar', label: 'Доходы', data: m.map(r => r.income), backgroundColor: 'rgba(34,197,94,0.24)', borderColor: '#22c55e', borderWidth: 1, borderRadius: 9, barPercentage: 0.62, categoryPercentage: 0.58 },
+        { type: 'bar', label: 'Оплачено', data: m.map(r => r.paidExpenses ?? r.expenses), backgroundColor: 'rgba(244,63,94,0.22)', borderColor: '#f43f5e', borderWidth: 1, borderRadius: 9, barPercentage: 0.62, categoryPercentage: 0.58 },
+        { type: 'bar', label: 'Запланировано', data: m.map(r => r.plannedExpenses || 0), backgroundColor: 'rgba(245,158,11,0.22)', borderColor: '#f59e0b', borderWidth: 1, borderRadius: 9, barPercentage: 0.62, categoryPercentage: 0.58 },
+        { type: 'line', label: 'Прогноз', data: m.map(r => r.forecastNet ?? r.net), borderColor: '#3b82f6', backgroundColor: '#3b82f6', pointBackgroundColor: '#3b82f6', pointBorderColor: '#ffffff', pointBorderWidth: 1.5, pointRadius: 3.5, borderWidth: 2.5, tension: 0.35 }
       ]
     },
     options: { ...baseOptions, interaction: { intersect: false, mode: 'index' }, plugins: { ...baseOptions.plugins, tooltip: { ...baseOptions.plugins.tooltip, callbacks: { label: c => c.dataset.label + ': ' + rub(c.parsed.y) } } } }
@@ -52,19 +53,19 @@ function drawMonthly(data) {
 function drawDonut(rows, totalValue) {
   chart = new Chart(document.getElementById('chart'), {
     type: 'doughnut',
-    data: { labels: rows.map(r => r[0]), datasets: [{ data: rows.map(r => r[1]), backgroundColor: rows.map((_, i) => colors[i % colors.length] + '66'), borderColor: rows.map((_, i) => colors[i % colors.length]), borderWidth: 1.5, hoverOffset: 3 }] },
+    data: { labels: rows.map(r => r[0]), datasets: [{ data: rows.map(r => r[1]), backgroundColor: rows.map((_, i) => colors[i % colors.length] + '55'), borderColor: rows.map((_, i) => colors[i % colors.length]), borderWidth: 1.5, hoverOffset: 3 }] },
     options: { ...baseOptions, cutout: '72%', scales: {}, plugins: { ...baseOptions.plugins, legend: { display: false }, tooltip: { ...baseOptions.plugins.tooltip, callbacks: { label: c => c.label + ': ' + rub(c.raw) } } } }
   });
 }
 
 function route(data) {
-  const expenseTotal = data.totals.expenses || total(data.expensesByCategory);
+  const paidTotal = data.totals.paidExpenses ?? data.totals.expenses ?? total(data.expensesByCategory);
   if (view === 'monthly') return renderOverview(data);
-  if (view === 'category') return renderRank({ kicker: 'Expense breakdown', title: 'Куда уходят деньги', subtitle: 'Рейтинг категорий по сумме расходов' }, data.expensesByCategory, expenseTotal);
-  if (view === 'income') return renderRank({ kicker: 'Revenue sources', title: 'Источники дохода', subtitle: 'Структура поступлений за период' }, data.incomeBySource, data.totals.income || total(data.incomeBySource));
-  if (view === 'payer') return renderDonutLayout({ kicker: 'Spending owners', title: 'Кто тратит', subtitle: 'Доля расходов по участникам' }, data.expensesByPayer, expenseTotal);
-  if (view === 'type') return renderDonutLayout({ kicker: 'Expense type', title: 'Тип расходов', subtitle: 'Структура расходов по типу' }, data.expensesByType, expenseTotal);
-  if (view === 'required') return renderDonutLayout({ kicker: 'Fixed load', title: 'Обязательные расходы', subtitle: 'Какая часть бюджета уходит на обязательное' }, data.expensesByRequired, expenseTotal);
+  if (view === 'category') return renderRank({ title: 'Куда уходят деньги' }, data.expensesByCategory, paidTotal);
+  if (view === 'income') return renderRank({ title: 'Источники дохода' }, data.incomeBySource, data.totals.income || total(data.incomeBySource));
+  if (view === 'payer') return renderDonutLayout({ title: 'Кто тратит' }, data.expensesByPayer, paidTotal);
+  if (view === 'type') return renderDonutLayout({ title: 'Тип расходов' }, data.expensesByType, paidTotal);
+  if (view === 'required') return renderDonutLayout({ title: 'Обязательные расходы' }, data.expensesByRequired, paidTotal);
   return renderOverview(data);
 }
 
