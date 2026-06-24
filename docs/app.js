@@ -1,5 +1,6 @@
 const charts = {};
 const formatRub = new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 });
+let lastPayload = null;
 
 function status(message, isError = false) {
   const el = document.getElementById('status');
@@ -26,7 +27,10 @@ function entries(obj, limit = 10) {
 }
 
 function moneyTick(value) {
-  return typeof value === 'number' ? formatRub.format(value) : value;
+  if (typeof value !== 'number') return value;
+  if (Math.abs(value) >= 1000000) return `${Math.round(value / 1000000)} млн ₽`;
+  if (Math.abs(value) >= 1000) return `${Math.round(value / 1000)} тыс ₽`;
+  return `${Math.round(value)} ₽`;
 }
 
 function setKpis(data) {
@@ -36,6 +40,15 @@ function setKpis(data) {
   document.getElementById('expenseCount').textContent = String(data.counts?.expenses || 0);
 }
 
+const commonOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  animation: false,
+  plugins: {
+    legend: { labels: { boxWidth: 10, usePointStyle: true } },
+  },
+};
+
 function renderMonthly(data) {
   const rows = data.monthly || [];
   makeChart('monthlyChart', {
@@ -43,17 +56,16 @@ function renderMonthly(data) {
     data: {
       labels: rows.map(r => r.month),
       datasets: [
-        { label: 'Доходы', data: rows.map(r => r.income), tension: 0.28, borderWidth: 2 },
-        { label: 'Расходы', data: rows.map(r => r.expenses), tension: 0.28, borderWidth: 2 },
-        { label: 'Баланс', data: rows.map(r => r.net), tension: 0.28, borderWidth: 2 },
+        { label: 'Доходы', data: rows.map(r => r.income), tension: 0.28, borderWidth: 2, pointRadius: 2 },
+        { label: 'Расходы', data: rows.map(r => r.expenses), tension: 0.28, borderWidth: 2, pointRadius: 2 },
+        { label: 'Баланс', data: rows.map(r => r.net), tension: 0.28, borderWidth: 2, pointRadius: 2 },
       ],
     },
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
+      ...commonOptions,
       interaction: { mode: 'index', intersect: false },
       scales: { y: { ticks: { callback: moneyTick } } },
-      plugins: { tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${formatRub.format(ctx.parsed.y)}` } } },
+      plugins: { ...commonOptions.plugins, tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${formatRub.format(ctx.parsed.y)}` } } },
     },
   });
 }
@@ -61,11 +73,10 @@ function renderMonthly(data) {
 function renderBar(id, label, rows) {
   makeChart(id, {
     type: 'bar',
-    data: { labels: rows.map(([name]) => name), datasets: [{ label, data: rows.map(([, value]) => value), borderRadius: 10 }] },
+    data: { labels: rows.map(([name]) => name), datasets: [{ label, data: rows.map(([, value]) => value), borderRadius: 8 }] },
     options: {
+      ...commonOptions,
       indexAxis: rows.length > 5 ? 'y' : 'x',
-      responsive: true,
-      maintainAspectRatio: false,
       scales: {
         x: { ticks: { callback: moneyTick } },
         y: { ticks: { callback: moneyTick } },
@@ -80,16 +91,15 @@ function renderDoughnut(id, label, rows) {
     type: 'doughnut',
     data: { labels: rows.map(([name]) => name), datasets: [{ label, data: rows.map(([, value]) => value) }] },
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { tooltip: { callbacks: { label: ctx => `${ctx.label}: ${formatRub.format(ctx.raw || 0)}` } } },
+      ...commonOptions,
+      cutout: '62%',
+      plugins: { ...commonOptions.plugins, tooltip: { callbacks: { label: ctx => `${ctx.label}: ${formatRub.format(ctx.raw || 0)}` } } },
     },
   });
 }
 
 function render(data) {
   Chart.defaults.font.family = 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-  Chart.defaults.plugins.legend.labels.usePointStyle = true;
   setKpis(data);
   renderMonthly(data);
   renderDoughnut('categoryChart', 'Расходы', entries(data.expensesByCategory, 8));
@@ -99,24 +109,27 @@ function render(data) {
   renderBar('requiredChart', 'Расходы', entries(data.expensesByRequired, 8));
 }
 
-async function loadData() {
-  const baseUrl = window.NOTION_CHARTS_API_URL;
-  if (!baseUrl || baseUrl.includes('YOUR-WORKER-URL')) {
-    status('В docs/config.js нужно вставить URL Cloudflare Worker.', true);
-    return;
-  }
+function payloadChanged(nextPayload) {
+  const next = JSON.stringify(nextPayload);
+  const prev = JSON.stringify(lastPayload);
+  lastPayload = nextPayload;
+  return next !== prev;
+}
 
-  status('Загружаю свежие данные из Notion…');
+async function loadData({ silent = false } = {}) {
+  const baseUrl = window.NOTION_CHARTS_API_URL || window.location.origin;
+  if (!silent) status('Загружаю свежие данные из Notion…');
   try {
-    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/api/summary`);
+    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/api/summary?ts=${Date.now()}`, { cache: 'no-store' });
     const data = await res.json();
     if (!res.ok || data.ok === false) throw new Error(data.error || `HTTP ${res.status}`);
-    render(data);
+    if (payloadChanged(data) || !silent) render(data);
     clearStatus();
   } catch (error) {
     status(`Не удалось загрузить данные: ${error.message}`, true);
   }
 }
 
-document.getElementById('refreshButton').addEventListener('click', loadData);
+document.getElementById('refreshButton').addEventListener('click', () => loadData());
 loadData();
+setInterval(() => loadData({ silent: true }), 60000);
