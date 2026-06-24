@@ -2,6 +2,29 @@ const charts = {};
 const formatRub = new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 });
 let lastPayload = null;
 
+const view = new URLSearchParams(window.location.search).get('view') || 'dashboard';
+const viewToChartId = {
+  monthly: 'monthlyChart',
+  category: 'categoryChart',
+  income: 'incomeSourceChart',
+  payer: 'payerChart',
+  type: 'expenseTypeChart',
+  required: 'requiredChart',
+};
+
+if (view !== 'dashboard') {
+  document.body.classList.add('single-view');
+}
+
+function applyViewMode() {
+  if (view === 'dashboard') return;
+  const activeId = viewToChartId[view] || 'monthlyChart';
+  document.querySelectorAll('.chart-card').forEach(card => {
+    if (card.querySelector(`#${activeId}`)) card.classList.add('active-chart');
+    else card.classList.remove('active-chart');
+  });
+}
+
 function status(message, isError = false) {
   const el = document.getElementById('status');
   el.textContent = message;
@@ -107,6 +130,7 @@ function render(data) {
   renderBar('payerChart', 'Расходы', entries(data.expensesByPayer, 8));
   renderDoughnut('expenseTypeChart', 'Расходы', entries(data.expensesByType, 8));
   renderBar('requiredChart', 'Расходы', entries(data.expensesByRequired, 8));
+  applyViewMode();
 }
 
 function payloadChanged(nextPayload) {
@@ -132,4 +156,9 @@ async function loadData({ silent = false } = {}) {
 
 document.getElementById('refreshButton').addEventListener('click', () => loadData());
 loadData();
-setInterval(() => loadData({ silent: true }), 60000);
+setInterval(() => loadData({ silent: true }), 15000);
+window.addEventListener('focus', () => loadData({ silent: true }));
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) loadData({ silent: true });
+});
+window.addEventListener('pageshow', () => loadData({ silent: true }));
