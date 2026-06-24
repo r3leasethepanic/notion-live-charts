@@ -7,7 +7,7 @@ const IDS = {
 };
 
 const P = {
-  title: 'Расход',
+  title: 'Наименование',
   amount: 'Сумма',
   date: 'Дата',
   category: 'Категория',
@@ -79,19 +79,16 @@ function number(prop) { return prop?.type === 'number' ? Number(prop.number || 0
 function relIds(prop) { return prop?.type === 'relation' ? (prop.relation || []).map(r => r.id) : []; }
 function pageTitle(row) { for (const prop of Object.values(row.properties || {})) if (prop?.type === 'title') return text(prop); return 'Без названия'; }
 function propDate(prop) { return prop?.type === 'date' ? prop.date?.start || '' : ''; }
-function key(dateLike) { const d = new Date(dateLike); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`; }
+function key(dateLike) { const d = new Date(dateLike); return Number.isNaN(d.getTime()) ? '' : `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`; }
 function ymd(date) { return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`; }
 function dueDate(year, month, day) { const last = new Date(Date.UTC(year, month + 1, 0)).getUTCDate(); return new Date(Date.UTC(year, month, Math.min(Math.max(1, day || 1), last))); }
-function monthsBetween(a, b) { return (b.getUTCFullYear() - a.getUTCFullYear()) * 12 + (b.getUTCMonth() - a.getUTCMonth()); }
 function monthName(date) { return ['январь','февраль','март','апрель','май','июнь','июль','август','сентябрь','октябрь','ноябрь','декабрь'][date.getUTCMonth()] + ' ' + date.getUTCFullYear(); }
+function selectName(prop) { return prop?.type === 'select' ? prop.select?.name || '' : ''; }
+function multiNames(prop) { return prop?.type === 'multi_select' ? (prop.multi_select || []).map(x => x.name).filter(Boolean) : []; }
+function latestExpense(rows) { return [...rows].sort((a, b) => String(propDate(b.properties?.[P.date] || '')).localeCompare(String(propDate(a.properties?.[P.date] || ''))))[0]; }
 
-function shouldCreate(frequency, due, existingDates) {
-  const freq = String(frequency || '').toLowerCase();
-  if (!freq || freq.includes('другое')) return false;
-  if (existingDates.some(d => key(d) === key(due))) return false;
-  if (freq.includes('квартал')) return !existingDates.some(d => monthsBetween(new Date(d), due) >= 0 && monthsBetween(new Date(d), due) < 3);
-  if (freq.includes('год')) return !existingDates.some(d => monthsBetween(new Date(d), due) >= 0 && monthsBetween(new Date(d), due) < 12);
-  return true;
+function shouldSkipCurrentMonth(rows, due) {
+  return rows.some(row => key(propDate(row.properties?.[P.date])) === key(due));
 }
 
 async function createExpense(env, expensesId, properties) {
@@ -99,6 +96,34 @@ async function createExpense(env, expensesId, properties) {
     method: 'POST',
     body: JSON.stringify({ parent: { data_source_id: expensesId }, properties }),
   });
+}
+
+function propsFromTemplate({ recurringId, recurringRow, expenseTemplate, categoryById, due, env }) {
+  const recurringProps = recurringRow?.properties || {};
+  const expenseProps = expenseTemplate?.properties || {};
+  const title = text(recurringProps[RP.title]) || text(expenseProps[P.title]) || 'Регулярный платеж';
+  const amount = number(recurringProps[RP.amount]) || number(expenseProps[P.amount]);
+  const categoryNames = relIds(recurringProps[RP.category]).map(id => categoryById[id]).filter(Boolean);
+  const expenseCategoryNames = multiNames(expenseProps[P.category]);
+  const accountIds = relIds(recurringProps[RP.account]).length ? relIds(recurringProps[RP.account]) : relIds(expenseProps[P.account]);
+  const requiredName = selectName(recurringProps[RP.required]) || selectName(expenseProps[P.required]);
+  const payerName = selectName(expenseProps[P.payer]) || env.RECURRING_DEFAULT_PAYER || 'Я';
+  const typeName = selectName(expenseProps[P.type]) || env.RECURRING_DEFAULT_EXPENSE_TYPE || 'Семейный';
+
+  const out = {
+    [P.title]: { title: [{ text: { content: `${title} — ${monthName(due)}` } }] },
+    [P.amount]: { number: amount },
+    [P.date]: { date: { start: ymd(due) } },
+    [P.status]: { select: { name: 'Запланировано' } },
+    [P.payer]: { select: { name: payerName } },
+    [P.type]: { select: { name: typeName } },
+    [P.recurring]: { relation: [{ id: recurringId }] },
+  };
+  if (requiredName) out[P.required] = { select: { name: requiredName } };
+  const finalCategories = categoryNames.length ? categoryNames : expenseCategoryNames;
+  if (finalCategories.length) out[P.category] = { multi_select: finalCategories.map(name => ({ name })) };
+  if (accountIds.length) out[P.account] = { relation: accountIds.map(id => ({ id })) };
+  return { title, amount, properties: out };
 }
 
 export async function generateRecurring(env, opts = {}) {
@@ -112,53 +137,36 @@ export async function generateRecurring(env, opts = {}) {
   ]);
 
   const categoryById = Object.fromEntries((categoryRows || []).map(row => [row.id, pageTitle(row)]));
-  const existingByRecurring = {};
+  const recurringById = Object.fromEntries((recurringRows || []).map(row => [row.id, row]));
+  const expenseGroups = {};
   for (const row of expenseRows) {
-    const props = row.properties || {};
-    const date = propDate(props[P.date]);
-    if (!date) continue;
-    for (const id of relIds(props[P.recurring])) (existingByRecurring[id] ||= []).push(date);
+    for (const id of relIds(row.properties?.[P.recurring])) (expenseGroups[id] ||= []).push(row);
   }
 
   const now = new Date();
   const dueYear = now.getUTCFullYear();
   const dueMonth = now.getUTCMonth();
+  const ids = new Set([...Object.keys(expenseGroups), ...recurringRows.filter(r => text(r.properties?.[RP.status]) === 'Активен').map(r => r.id)]);
   const result = { dryRun: !!opts.dryRun, created: [], skipped: [] };
 
-  for (const row of recurringRows) {
-    const props = row.properties || {};
-    const title = text(props[RP.title]) || 'Регулярный платеж';
-    const status = text(props[RP.status]);
-    const amount = number(props[RP.amount]);
-    const frequency = text(props[RP.frequency]);
-    const day = Math.round(number(props[RP.day]) || 1);
-
+  for (const id of ids) {
+    const recurringRow = recurringById[id];
+    const recurringProps = recurringRow?.properties || {};
+    const linkedExpenses = expenseGroups[id] || [];
+    const template = latestExpense(linkedExpenses);
+    const title = text(recurringProps[RP.title]) || text(template?.properties?.[P.title]) || 'Регулярный платеж';
+    const status = text(recurringProps[RP.status]) || 'Активен';
     if (status !== 'Активен') { result.skipped.push({ title, reason: `status:${status}` }); continue; }
-    if (!amount) { result.skipped.push({ title, reason: 'no_amount' }); continue; }
 
+    const templateDate = propDate(template?.properties?.[P.date]);
+    const day = Math.round(number(recurringProps[RP.day]) || (templateDate ? new Date(templateDate).getUTCDate() : 1));
     const due = dueDate(dueYear, dueMonth, day);
-    if (!shouldCreate(frequency, due, existingByRecurring[row.id] || [])) { result.skipped.push({ title, reason: 'already_exists_or_not_due' }); continue; }
+    if (shouldSkipCurrentMonth(linkedExpenses, due)) { result.skipped.push({ title, reason: 'already_exists_this_month' }); continue; }
 
-    const expenseTitle = `${title} — ${monthName(due)}`;
-    const categoryNames = relIds(props[RP.category]).map(id => categoryById[id]).filter(Boolean);
-    const accountIds = relIds(props[RP.account]);
-    const requiredName = text(props[RP.required]);
-
-    const expenseProps = {
-      [P.title]: { title: [{ text: { content: expenseTitle } }] },
-      [P.amount]: { number: amount },
-      [P.date]: { date: { start: ymd(due) } },
-      [P.status]: { select: { name: 'Запланировано' } },
-      [P.payer]: { select: { name: env.RECURRING_DEFAULT_PAYER || 'Я' } },
-      [P.type]: { select: { name: env.RECURRING_DEFAULT_EXPENSE_TYPE || 'Семейный' } },
-      [P.recurring]: { relation: [{ id: row.id }] },
-    };
-    if (requiredName) expenseProps[P.required] = { select: { name: requiredName } };
-    if (categoryNames.length) expenseProps[P.category] = { multi_select: categoryNames.map(name => ({ name })) };
-    if (accountIds.length) expenseProps[P.account] = { relation: accountIds.map(id => ({ id })) };
-
-    if (!opts.dryRun) await createExpense(env, expensesId, expenseProps);
-    result.created.push({ title: expenseTitle, amount, date: ymd(due), frequency });
+    const built = propsFromTemplate({ recurringId: id, recurringRow, expenseTemplate: template, categoryById, due, env });
+    if (!built.amount) { result.skipped.push({ title, reason: 'no_amount' }); continue; }
+    if (!opts.dryRun) await createExpense(env, expensesId, built.properties);
+    result.created.push({ title: `${built.title} — ${monthName(due)}`, amount: built.amount, date: ymd(due) });
   }
   return result;
 }
