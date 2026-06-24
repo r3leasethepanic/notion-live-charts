@@ -2,6 +2,8 @@ name = "notion-live-charts"
 main = "worker/index.js"
 compatibility_date = "2026-06-24"
 
+assets = { directory = "./docs" }
+
 [vars]
 NOTION_EXPENSES_DATA_SOURCE_ID = "c6466c54-4c7d-4753-8284-8d55207b8f46"
 NOTION_INCOME_DATA_SOURCE_ID = "54e91f62-f449-469e-894a-f6d0a1f6b6f1"
