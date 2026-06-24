@@ -10,7 +10,6 @@ function num(v) { return numFmt.format(Math.round(Number(v || 0))); }
 function pct(v, total) { return total ? Math.round(Number(v || 0) / total * 100) + '%' : '0%'; }
 function total(obj) { return Object.values(obj || {}).reduce((s, v) => s + Number(v || 0), 0); }
 function sorted(obj, limit = 6) { return Object.entries(obj || {}).filter(x => Number(x[1]) > 0).sort((a,b) => b[1] - a[1]).slice(0, limit); }
-function top(obj) { return sorted(obj, 1)[0]; }
 function safeName(x) { return String(x || 'Без значения'); }
 
 function cardShell(meta, badgeLabel, badgeValue, body) {
@@ -30,26 +29,26 @@ function cardShell(meta, badgeLabel, badgeValue, body) {
     </section>`;
 }
 
-function renderRank(meta, source, totalValue, accent = 'blue') {
-  const rows = sorted(source, 7);
-  const max = Math.max(...rows.map(r => Number(r[1] || 0)), 1);
-  const badge = rows[0] ? pct(rows[0][1], totalValue) : '0%';
-  const body = `<div class="rank-list">${rows.map((r, i) => `
+function renderRank(meta, source, totalValue) {
+  const rankRows = sorted(source, 7);
+  const maxValue = Math.max(...rankRows.map(r => Number(r[1] || 0)), 1);
+  const badge = rankRows[0] ? pct(rankRows[0][1], totalValue) : '0%';
+  const body = `<div class="rank-list">${rankRows.map((r, i) => `
     <div class="rank-row">
       <div class="rank-name">${safeName(r[0])}</div>
-      <div class="track"><div class="fill" style="width:${Math.max(4, Math.round(Number(r[1]) / max * 100))}%;background:linear-gradient(90deg, ${colors[i % colors.length]}, ${colors[(i + 1) % colors.length]})"></div></div>
+      <div class="track"><div class="fill" style="width:${Math.max(4, Math.round(Number(r[1]) / maxValue * 100))}%;background:linear-gradient(90deg, ${colors[i % colors.length]}, ${colors[(i + 1) % colors.length]})"></div></div>
       <div class="rank-value">${rub(r[1])}</div>
     </div>`).join('')}</div>`;
-  cardShell(meta, rows[0] ? safeName(rows[0][0]) : 'Топ', badge, body);
+  cardShell(meta, rankRows[0] ? safeName(rankRows[0][0]) : 'Топ', badge, body);
 }
 
 function renderDonutLayout(meta, source, totalValue) {
-  const rows = sorted(source, 6);
-  const main = rows[0];
-  const body = `<div class="split"><div class="donut-box"><canvas id="chart"></canvas></div><div class="legend-list">${rows.map((r, i) => `
+  const donutRows = sorted(source, 6);
+  const main = donutRows[0];
+  const body = `<div class="split"><div class="donut-box"><canvas id="chart"></canvas></div><div class="legend-list">${donutRows.map((r, i) => `
     <div class="legend-row"><span class="dot" style="background:${colors[i % colors.length]}"></span><span>${safeName(r[0])}</span><strong>${pct(r[1], totalValue)}</strong></div>`).join('')}</div></div>`;
   cardShell(meta, main ? safeName(main[0]) : 'Доля', main ? pct(main[1], totalValue) : '0%', body);
-  drawDonut(rows, totalValue);
+  drawDonut(donutRows, totalValue);
 }
 
 function renderOverview(data) {
